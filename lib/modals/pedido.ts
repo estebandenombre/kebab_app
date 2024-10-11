@@ -11,8 +11,11 @@ interface Pedido {
     id: string;
     items: PedidoItem[];
     total: string;
-    status: 'pendiente' | 'preparando' | 'listo'; // Cambiado a español
+    status: 'pendiente' | 'preparando' | 'listo';
     timestamp: string;
+    notation?: string; // Campo de notas
+    customerName: string; // Nuevo campo para el nombre del cliente
+    customerPhone: string; // Nuevo campo para el teléfono del cliente
 }
 
 const pedidoSchema = new mongoose.Schema<Pedido>({
@@ -26,10 +29,14 @@ const pedidoSchema = new mongoose.Schema<Pedido>({
         },
     ],
     total: { type: String, required: true },
-    status: { type: String, enum: ['pendiente', 'preparando', 'listo'], required: true }, // Cambiado a español
+    status: { type: String, enum: ['pendiente', 'preparando', 'listo'], required: true },
     timestamp: { type: String, required: true },
+    notation: { type: String, required: false }, // Campo de notas
+    customerName: { type: String, required: false }, // Campo para el nombre del cliente
+    customerPhone: { type: String, required: false }, // Campo para el teléfono del cliente
 });
 
+// Modelo de Mongoose
 const PedidoModel = mongoose.models.Pedido || mongoose.model('Pedido', pedidoSchema);
 
 export default PedidoModel;

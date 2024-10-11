@@ -1,4 +1,4 @@
-"use client";
+'use client'
 
 import React, { useState, useEffect } from 'react';
 import {
@@ -26,6 +26,7 @@ import {
     Tabs,
     Tab,
     Snackbar,
+    TextField,
 } from '@mui/material';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import {
@@ -40,35 +41,37 @@ import {
     RestaurantMenu,
     Kitchen,
     DeliveryDining,
+    Archive,
+    Warning as WarningIcon,
 } from '@mui/icons-material';
 
 const theme = createTheme({
     palette: {
         primary: {
-            main: '#933e36', // Dark blue
+            main: '#933e36',
         },
         secondary: {
-            main: '#e74c3c', // Red
+            main: '#e74c3c',
         },
         error: {
-            main: '#c0392b', // Dark red
+            main: '#c0392b',
         },
         warning: {
-            main: '#f39c12', // Orange
+            main: '#f39c12',
         },
         info: {
-            main: '#3498db', // Light blue
+            main: '#3498db',
         },
         success: {
-            main: '#27ae60', // Green
+            main: '#27ae60',
         },
         background: {
-            default: '#ecf0f1', // Light gray
-            paper: '#ffffff', // White
+            default: '#ecf0f1',
+            paper: '#ffffff',
         },
         text: {
-            primary: '#2c3e50', // Dark blue
-            secondary: '#7f8c8d', // Gray
+            primary: '#2c3e50',
+            secondary: '#7f8c8d',
         },
     },
     typography: {
@@ -90,8 +93,9 @@ interface Order {
     id: string;
     items: OrderItem[];
     total: string;
-    status: 'pendiente' | 'preparando' | 'listo' | 'cancelado';
+    status: 'pendiente' | 'preparando' | 'listo' | 'entregado' | 'cancelado';
     timestamp: string;
+    notation?: string;
 }
 
 const menuItems: MenuItem[] = [
@@ -112,18 +116,15 @@ export default function Dashboard() {
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [snackbarOpen, setSnackbarOpen] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('');
+    const [orderNotation, setOrderNotation] = useState('');
+    const [startDate, setStartDate] = useState<string>("");
+    const [endDate, setEndDate] = useState<string>("");
 
     useEffect(() => {
-        // Llamar a fetchOrders inicialmente
         fetchOrders();
-
-        // Configurar el polling
-        const intervalId = setInterval(fetchOrders, 5000); // 5000 ms = 5 seconds
-
-        // Limpiar el intervalo al desmontar el componente
+        const intervalId = setInterval(fetchOrders, 5000);
         return () => clearInterval(intervalId);
-    }, []); // Dependencias vacías para ejecutar solo una vez
-
+    }, []);
 
     const fetchOrders = async () => {
         try {
@@ -191,6 +192,7 @@ export default function Dashboard() {
             total: calculateTotal(currentOrder),
             status: 'pendiente',
             timestamp: new Date().toISOString(),
+            notation: orderNotation,
         };
 
         try {
@@ -209,7 +211,8 @@ export default function Dashboard() {
             const data = await response.json();
             setOrders([...orders, data.data]);
             setCurrentOrder([]);
-            setActiveTab(1); // Switch to kitchen view
+            setOrderNotation('');
+            setActiveTab(1);
             setSnackbarMessage('Pedido creado con éxito');
             setSnackbarOpen(true);
         } catch (error) {
@@ -219,7 +222,7 @@ export default function Dashboard() {
         }
     };
 
-    const updateOrderStatus = async (orderId: string, newStatus: 'pendiente' | 'preparando' | 'listo') => {
+    const updateOrderStatus = async (orderId: string, newStatus: 'pendiente' | 'preparando' | 'listo' | 'entregado') => {
         try {
             const response = await fetch('/api/orders', {
                 method: 'PUT',
@@ -242,30 +245,6 @@ export default function Dashboard() {
         } catch (error) {
             console.error('Error updating order status:', error);
             setSnackbarMessage('Error al actualizar el estado del pedido');
-            setSnackbarOpen(true);
-        }
-    };
-
-    const handleDeliverOrder = async (orderId: string) => {
-        try {
-            const response = await fetch('/api/orders', {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ id: orderId, status: 'entregado' }),
-            });
-
-            if (!response.ok) {
-                throw new Error('Error delivering order');
-            }
-
-            setOrders(orders.filter(order => order.id !== orderId));
-            setSnackbarMessage('Pedido entregado');
-            setSnackbarOpen(true);
-        } catch (error) {
-            console.error('Error delivering order:', error);
-            setSnackbarMessage('Error al entregar el pedido');
             setSnackbarOpen(true);
         }
     };
@@ -314,6 +293,8 @@ export default function Dashboard() {
                 return 'warning';
             case 'listo':
                 return 'success';
+            case 'entregado':
+                return 'info';
             default:
                 return 'default';
         }
@@ -327,10 +308,78 @@ export default function Dashboard() {
                 return <AccessTime />;
             case 'listo':
                 return <CheckCircle />;
+            case 'entregado':
+                return <LocalShipping />;
             default:
                 return <></>;
         }
     };
+    // Estado para manejar el filtro activo
+    const [activeFilter, setActiveFilter] = useState<'today' | 'yesterday' | 'week' | 'month' | 'all'>('all');
+    // Función para manejar la selección de filtros predefinidos
+    const handleFilter = (filter: 'today' | 'yesterday' | 'week' | 'month' | 'all') => {
+        const now = new Date();
+        let start: Date;
+        let end: Date;
+
+        switch (filter) {
+            case 'today':
+                start = new Date();
+                start.setUTCHours(0, 0, 0, 0); // Hoy a las 00:00:00 UTC
+                end = new Date();
+                end.setUTCHours(23, 59, 59, 999); // Hoy a las 23:59:59 UTC
+                break;
+
+            case 'yesterday':
+                start = new Date(now);
+                start.setUTCDate(now.getUTCDate() - 1); // Ayer
+                start.setUTCHours(0, 0, 0, 0); // Ayer a las 00:00:00 UTC
+                end = new Date(now);
+                end.setUTCDate(now.getUTCDate() - 1); // Ayer
+                end.setUTCHours(23, 59, 59, 999); // Ayer a las 23:59:59 UTC
+                break;
+
+            case 'week':
+                start = new Date(now);
+                start.setUTCDate(now.getUTCDate() - now.getUTCDay()); // Domingo
+                start.setUTCHours(0, 0, 0, 0); // Inicio de la semana
+
+                end = new Date(now);
+                end.setUTCDate(now.getUTCDate() + (6 - now.getUTCDay())); // Sábado
+                end.setUTCHours(23, 59, 59, 999); // Fin de la semana
+                break;
+
+            case 'month':
+                start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)); // Primer día del mes
+                start.setUTCHours(0, 0, 0, 0);
+                end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)); // Último día del mes
+                end.setUTCHours(23, 59, 59, 999);
+                break;
+
+            case 'all':
+            default:
+                setActiveFilter('all');
+                setStartDate("");
+                setEndDate("");
+                return; // En caso de que el filtro sea 'all', no hacemos nada más
+        }
+
+        setStartDate(start.toISOString()); // Mantener el formato ISO para comparación
+        setEndDate(end.toISOString());
+        setActiveFilter(filter); // Actualiza el filtro activo
+    };
+
+    // Filtrar órdenes basado en fechas
+    const filteredOrders = activeFilter === 'all'
+        ? orders.filter(order => order.status === 'entregado') // Muestra todos los pedidos entregados
+        : orders.filter(order => {
+            const orderDate = new Date(order.timestamp);
+            const isInRange =
+                (!startDate || orderDate >= new Date(startDate)) &&
+                (!endDate || orderDate <= new Date(endDate));
+            return order.status === 'entregado' && isInRange;
+        });
+
 
     return (
         <ThemeProvider theme={theme}>
@@ -342,10 +391,19 @@ export default function Dashboard() {
                         </Typography>
                     </Toolbar>
                 </AppBar>
-                <Tabs value={activeTab} onChange={handleTabChange} centered>
+                <Tabs
+                    value={activeTab}
+                    onChange={handleTabChange}
+                    centered
+                    variant="scrollable"
+                    scrollButtons="auto"
+                    allowScrollButtonsMobile
+                    sx={{ overflowX: 'auto' }}
+                >
                     <Tab icon={<RestaurantMenu />} label="Nuevo Pedido" />
                     <Tab icon={<Kitchen />} label="Cocina" />
                     <Tab icon={<DeliveryDining />} label="Pedidos Listos" />
+                    <Tab icon={<Archive />} label="Pedidos Entregados" />
                 </Tabs>
                 <Container maxWidth="lg" sx={{ mt: 4 }}>
                     {activeTab === 0 && (
@@ -398,6 +456,14 @@ export default function Dashboard() {
                                     <Typography variant="h6">
                                         Total: {calculateTotal(currentOrder)} €
                                     </Typography>
+                                    <TextField
+                                        fullWidth
+                                        label="Notación del pedido"
+                                        variant="outlined"
+                                        value={orderNotation}
+                                        onChange={(e) => setOrderNotation(e.target.value)}
+                                        margin="normal"
+                                    />
                                     <Button
                                         variant="contained"
                                         color="primary"
@@ -414,12 +480,11 @@ export default function Dashboard() {
                     )}
                     {activeTab === 1 && (
                         <Grid container spacing={3}>
-                            {orders.filter(order => order.status !== 'listo').map((order) => (
+                            {orders.filter(order => order.status !== 'listo' && order.status !== 'entregado').map((order) => (
                                 <Grid item xs={12} md={6} lg={4} key={order.id}>
                                     <Card elevation={3}>
                                         <CardContent>
                                             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-
                                                 <Typography variant="h6" component="h2">
                                                     Pedido: {order.id}
                                                 </Typography>
@@ -431,7 +496,16 @@ export default function Dashboard() {
                                             </Box>
                                             <Typography variant="body2" color="text.secondary" gutterBottom>
                                                 Hora: {new Date(order.timestamp).toLocaleTimeString()}
+
                                             </Typography>
+                                            {order.notation && (
+                                                <Box sx={{ display: 'flex', alignItems: 'center', mt: 1, mb: 2, backgroundColor: 'rgba(0, 0, 0, 0.04)', p: 1, borderRadius: 1 }}>
+                                                    <WarningIcon color="warning" sx={{ mr: 1 }} />
+                                                    <Typography variant="body2" color="text.secondary">
+                                                        {order.notation}
+                                                    </Typography>
+                                                </Box>
+                                            )}
                                             <Divider sx={{ my: 1 }} />
                                             <List dense>
                                                 {order.items.map((item) => (
@@ -505,6 +579,14 @@ export default function Dashboard() {
                                                     Listo hace: {getTimeDifference(order.timestamp)}
                                                 </Typography>
                                             </Box>
+                                            {order.notation && (
+                                                <Box sx={{ display: 'flex', alignItems: 'center', mt: 1, mb: 2, backgroundColor: 'rgba(0, 0, 0, 0.04)', p: 1, borderRadius: 1 }}>
+                                                    <WarningIcon color="warning" sx={{ mr: 1 }} />
+                                                    <Typography variant="body2" color="text.secondary">
+                                                        {order.notation}
+                                                    </Typography>
+                                                </Box>
+                                            )}
                                             <Divider sx={{ my: 1 }} />
                                             <List dense>
                                                 {order.items.slice(0, 2).map((item) => (
@@ -533,7 +615,7 @@ export default function Dashboard() {
                                                 variant="contained"
                                                 color="primary"
                                                 startIcon={<LocalShipping />}
-                                                onClick={() => handleDeliverOrder(order.id)}
+                                                onClick={() => updateOrderStatus(order.id, 'entregado')}
                                             >
                                                 Entregar
                                             </Button>
@@ -558,6 +640,92 @@ export default function Dashboard() {
                             ))}
                         </Grid>
                     )}
+                    {activeTab === 3 && (
+                        <>
+                            {/* Filtros de fecha */}
+                            <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <Box sx={{ display: 'flex', flexDirection: 'row' }}>
+                                    <Button
+                                        variant="outlined"
+                                        onClick={() => handleFilter('today')}
+                                        sx={{ mr: 1, bgcolor: activeFilter === 'today' ? 'primary.main' : 'transparent', color: activeFilter === 'today' ? 'white' : 'inherit' }}
+                                    >
+                                        Hoy
+                                    </Button>
+                                    <Button
+                                        variant="outlined"
+                                        onClick={() => handleFilter('week')}
+                                        sx={{ mr: 1, bgcolor: activeFilter === 'week' ? 'primary.main' : 'transparent', color: activeFilter === 'week' ? 'white' : 'inherit' }}
+                                    >
+                                        Semana
+                                    </Button>
+                                    <Button
+                                        variant="outlined"
+                                        onClick={() => handleFilter('month')}
+                                        sx={{ mr: 1, bgcolor: activeFilter === 'month' ? 'primary.main' : 'transparent', color: activeFilter === 'month' ? 'white' : 'inherit' }}
+                                    >
+                                        Mes
+                                    </Button>
+                                    <Button
+                                        variant="outlined"
+                                        onClick={() => handleFilter('all')}
+                                        sx={{ mr: 1, bgcolor: activeFilter === 'all' ? 'primary.main' : 'transparent', color: activeFilter === 'all' ? 'white' : 'inherit' }}
+                                    >
+                                        Todos
+                                    </Button>
+                                </Box>
+
+                            </Box>
+
+                            <Grid container spacing={3}>
+                                {filteredOrders.map((order) => (
+                                    <Grid item xs={12} sm={6} md={4} key={order.id}>
+                                        <Card elevation={3}>
+                                            <CardContent>
+                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                                                    <Typography variant="h6" component="h2">
+                                                        Pedido: {order.id}
+                                                    </Typography>
+                                                    <Chip
+                                                        icon={<LocalShipping />}
+                                                        label="Entregado"
+                                                        color="info"
+                                                    />
+                                                </Box>
+                                                <Typography variant="body2" color="text.secondary" gutterBottom>
+                                                    Entregado: {new Date(order.timestamp).toLocaleString()}
+                                                </Typography>
+                                                {order.notation && (
+                                                    <Box sx={{ display: 'flex', alignItems: 'center', mt: 1, mb: 2, backgroundColor: 'rgba(0, 0, 0, 0.04)', p: 1, borderRadius: 1 }}>
+                                                        <WarningIcon color="warning" sx={{ mr: 1 }} />
+                                                        <Typography variant="body2" color="text.secondary">
+                                                            {order.notation}
+                                                        </Typography>
+                                                    </Box>
+                                                )}
+                                                <Divider sx={{ my: 1 }} />
+                                                <List dense>
+                                                    {order.items.map((item) => (
+                                                        <ListItem key={item.id} disablePadding>
+                                                            <ListItemText
+                                                                primary={`${item.quantity}x ${item.name}`}
+                                                            />
+                                                        </ListItem>
+                                                    ))}
+                                                </List>
+                                                <Divider sx={{ my: 1 }} />
+                                                <Typography variant="subtitle1" sx={{ mt: 2, fontWeight: 'bold' }}>
+                                                    Total: {order.total} €
+                                                </Typography>
+                                            </CardContent>
+                                        </Card>
+                                    </Grid>
+                                ))}
+                            </Grid>
+                        </>
+                    )}
+
+
                 </Container>
             </Box>
 
@@ -577,6 +745,11 @@ export default function Dashboard() {
                     <Typography variant="subtitle1" sx={{ mt: 2, fontWeight: 'bold' }}>
                         Total: {selectedOrder?.total} €
                     </Typography>
+                    {selectedOrder?.notation && (
+                        <Typography variant="body1" sx={{ mt: 2 }}>
+                            Notación: {selectedOrder.notation}
+                        </Typography>
+                    )}
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={handleCloseDialog} color="primary">

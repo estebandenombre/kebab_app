@@ -9,6 +9,9 @@ interface Pedido {
     total: string;
     status: string;
     timestamp: string;
+    notation?: string;
+    customerName?: string; // Campo añadido
+    customerPhone?: string; // Campo añadido
 }
 
 // GET request: Obtener todos los pedidos o filtrados por algún criterio
@@ -32,6 +35,7 @@ export const GET = async (request: Request) => {
             console.error("Error recuperando pedidos:", error.message);
             return NextResponse.json({ error: "Error recuperando pedidos: " + error.message }, { status: 500 });
         }
+        return NextResponse.json({ error: "Error desconocido" }, { status: 500 });
     }
 };
 
@@ -42,8 +46,9 @@ export const POST = async (request: Request) => {
         const data: Pedido = await request.json();
 
         // Validar los campos requeridos
-        const { items, total, status, timestamp } = data;
+        const { items, total, status, timestamp, notation, customerName, customerPhone } = data;
 
+        // Validación de campos obligatorios
         if (!items || !Array.isArray(items) || items.length === 0 || !total || !status || !timestamp) {
             return NextResponse.json({ error: "Faltan campos requeridos" }, { status: 400 });
         }
@@ -55,6 +60,9 @@ export const POST = async (request: Request) => {
             total,
             status,
             timestamp,
+            notation,
+            customerName,   // Este campo ahora no es obligatorio
+            customerPhone,   // Este campo ahora no es obligatorio
         });
 
         // Guardar el nuevo pedido en la base de datos
@@ -70,6 +78,7 @@ export const POST = async (request: Request) => {
             console.error("Error guardando el pedido:", error.message);
             return NextResponse.json({ error: "Error guardando el pedido: " + error.message }, { status: 500 });
         }
+        return NextResponse.json({ error: "Error desconocido" }, { status: 500 });
     }
 };
 
@@ -81,14 +90,21 @@ export const PUT = async (request: Request) => {
         const updateData: Partial<Pedido> = await request.json(); // Obtener los datos del cuerpo de la solicitud
 
         // Validar los campos requeridos
-        if (!updateData.id || !updateData.status) {
+        if (!updateData.id || (!updateData.status && !updateData.notation && !updateData.customerName && !updateData.customerPhone)) {
             return NextResponse.json({ error: "Faltan campos requeridos" }, { status: 400 });
         }
+
+        // Crear un objeto con los campos a actualizar
+        const updateFields: Partial<Pedido> = {};
+        if (updateData.status) updateFields.status = updateData.status;
+        if (updateData.notation !== undefined) updateFields.notation = updateData.notation;
+        if (updateData.customerName) updateFields.customerName = updateData.customerName;
+        if (updateData.customerPhone) updateFields.customerPhone = updateData.customerPhone;
 
         // Actualizar el pedido utilizando el ID proporcionado
         const updatedPedido = await PedidoModel.findOneAndUpdate(
             { id: updateData.id }, // Buscar por ID
-            { status: updateData.status }, // Actualizar solo el campo 'status'
+            updateFields, // Actualizar los campos proporcionados
             { new: true }
         );
 
@@ -101,8 +117,9 @@ export const PUT = async (request: Request) => {
     } catch (error: unknown) {
         if (error instanceof Error) {
             console.error("Error actualizando el pedido:", error.message);
-            return NextResponse.json({ message: "Error actualizando el pedido" }, { status: 500 });
+            return NextResponse.json({ error: "Error actualizando el pedido: " + error.message }, { status: 500 });
         }
+        return NextResponse.json({ error: "Error desconocido" }, { status: 500 });
     }
 };
 
@@ -130,7 +147,8 @@ export const DELETE = async (request: Request) => {
     } catch (error: unknown) {
         if (error instanceof Error) {
             console.error("Error eliminando el pedido:", error.message);
-            return NextResponse.json({ message: "Error eliminando el pedido", status: 500 });
+            return NextResponse.json({ error: "Error eliminando el pedido: " + error.message }, { status: 500 });
         }
+        return NextResponse.json({ error: "Error desconocido" }, { status: 500 });
     }
 };
