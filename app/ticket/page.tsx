@@ -1,23 +1,24 @@
 'use client';
 
-import React, { useEffect, useState, Suspense } from 'react'; // Importar Suspense
+import React, { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
-    Container,
+    CircularProgress,
     Typography,
-    Paper,
     Box,
+    ThemeProvider,
+    createTheme,
+    CssBaseline,
+    Container,
     Button,
+    Divider,
     List,
     ListItem,
     ListItemText,
-    Divider,
-    CircularProgress,
+    Paper,
 } from '@mui/material';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { Download } from '@mui/icons-material';
-import jsPDF from 'jspdf';
-import logo from '../../public/logo.png'; // Importar el logo
+import { jsPDF } from 'jspdf';
 
 // Definición de la paleta de colores
 const theme = createTheme({
@@ -42,21 +43,25 @@ const theme = createTheme({
     },
 });
 
-// Interfaces de TypeScript
-interface OrderItem {
-    id: string;
+interface PedidoItem {
+    id: string; // ID único para cada item
     name: string;
-    price: number;
     quantity: number;
+    price: number; // Precio unitario
 }
 
-interface Order {
+interface Pedido {
     id: string;
-    items: OrderItem[];
+    items: PedidoItem[];
     total: string;
-    customerName: string;
-    customerPhone: string;
-    notation?: string;
+    status: 'pendiente' | 'preparando' | 'listo';
+    timestamp: string;
+    notation?: string; // Campo de notas
+    customerName?: string; // Campo para el nombre del cliente
+    customerPhone?: string; // Campo para el teléfono del cliente
+    pickupDateTime?: string; // Nuevo campo para la fecha y hora de recogida (opcional)
+    isDelivery?: boolean; // Campo para indicar si es entrega a domicilio
+    paid: boolean; // Campo para indicar si el pedido ha sido pagado
 }
 
 // Información ficticia del restaurante
@@ -66,51 +71,135 @@ const restaurantInfo = {
     phone: '+34 912 345 678',
 };
 
-function CashPaymentPage() {
+const TicketPage: React.FC = () => {
     const searchParams = useSearchParams();
-    const [order, setOrder] = useState<Order | null>(null);
+
+    const [orderId, setOrderId] = useState<string | null>(null);
+    const [total, setTotal] = useState<string | null>(null);
+    const [customerName, setCustomerName] = useState<string | null>(null);
+    const [customerPhone, setCustomerPhone] = useState<string | null>(null);
+    const [notation, setNotation] = useState<string | null>(null);
+    const [isDelivery, setIsDelivery] = useState<boolean>(false);
+    const [pickupDateTime, setPickupDateTime] = useState<string | null>(null);
+    const [items, setItems] = useState<PedidoItem[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
 
+
     useEffect(() => {
-        const orderId = searchParams.get('orderId');
-        if (orderId) {
-            fetchOrder(orderId);
-        } else {
-            setLoading(false);
+        const id = searchParams.get('orderId');
+        const totalParam = searchParams.get('total');
+        const name = searchParams.get('customerName');
+        const phone = searchParams.get('customerPhone');
+        const note = searchParams.get('notation');
+        const delivery = searchParams.get('isDelivery');
+        const pickupDate = searchParams.get('pickupDateTime');
+        const itemsParam = searchParams.get('items');
+
+        if (id) setOrderId(id);
+        if (totalParam) setTotal(totalParam);
+        if (name) setCustomerName(name);
+        if (phone) setCustomerPhone(phone);
+        if (note) setNotation(note);
+        if (delivery) setIsDelivery(delivery === 'true'); // Convertir a booleano
+        if (pickupDate) setPickupDateTime(pickupDate);
+
+        if (itemsParam) {
+            try {
+                const parsedItems: PedidoItem[] = itemsParam.split(',').map((item) => {
+                    const match = item.match(/(\w+)\s\((.*?)\):\s*(\d+)\s*x\s*([\d,.]+)\s*€/);
+                    if (match) {
+                        const id = match[1].trim();
+                        const name = match[2].trim();
+                        const quantity = parseInt(match[3], 10);
+                        const price = parseFloat(match[4].replace(',', '.'));
+
+                        return {
+                            id,
+                            name,
+                            quantity,
+                            price,
+                        };
+                    } else {
+                        throw new Error(`El formato del item "${item}" es inválido.`);
+                    }
+                });
+                setItems(parsedItems);
+            } catch (error) {
+                console.error('Error al analizar itemsParam:', error);
+
+            }
         }
     }, [searchParams]);
 
-    const fetchOrder = async (orderId: string) => {
-        try {
-            const response = await fetch(`/api/orders/${orderId}`);
-            if (!response.ok) {
-                throw new Error('Error fetching order');
+    useEffect(() => {
+        const handlePostOrder = async () => {
+            if (!orderId || !items.length) {
+
+                setLoading(false);
+                return;
             }
-            const data = await response.json();
-            setOrder(data.data);
-        } catch (error) {
-            console.error('Error fetching order:', error);
-        } finally {
-            setLoading(false);
-        }
-    };
+
+            const orderData: Pedido = {
+                id: orderId!,
+                items,
+                total: total || "0",
+                status: 'pendiente',
+                timestamp: new Date().toISOString(),
+                notation: notation || undefined,
+                customerName: customerName || undefined,
+                customerPhone: customerPhone || undefined,
+                pickupDateTime: pickupDateTime || undefined,
+                isDelivery,
+                paid: true
+            };
+
+            try {
+                const response = await fetch("/api/orders", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify(orderData),
+                });
+
+                if (!response.ok) {
+                    throw new Error("Error al guardar la orden.");
+                }
+
+                const result = await response.json();
+                console.log("Orden guardada:", result);
+
+            } catch (error: unknown) {
+                if (error instanceof Error) {
+                    console.error('Error creando la orden:', error.message);
+                } else {
+                    console.error('Error creando la orden:', error);
+                }
+            }
+            finally {
+                setLoading(false);
+            }
+        };
+
+        handlePostOrder();
+    }, [orderId, total, customerName, customerPhone, notation, isDelivery, pickupDateTime, items]);
 
     const handleDownloadReceipt = async () => {
-        if (!order) return;
+        if (!orderId) return;
 
         const doc = new jsPDF();
         const margin = 20;
         const yStart = margin + 10;
 
         // Cargar el logo y agregarlo al PDF
-        const logoImg = await loadImage(logo.src) as HTMLImageElement; // Asegúrate de que sea un HTMLImageElement
-        doc.addImage(logoImg, 'PNG', margin, yStart, 40, 40); // Ajustar el tamaño y posición del logo
+        const logoImg = await loadImage('/logo.png') as HTMLImageElement; // Ajusta la ruta de la imagen según sea necesario
+        doc.addImage(logoImg, 'PNG', margin, yStart, 40, 40); // Ajustar la posición y tamaño del logo
 
         // Agregar la información del restaurante al recibo
         doc.setFont('Helvetica', 'bold');
         doc.setFontSize(22);
         doc.setTextColor('#933e36');
-        doc.text(restaurantInfo.name, margin, yStart + 50); // Ajustar la posición
+        doc.text(restaurantInfo.name, margin, yStart + 50);
 
         doc.setFont('Helvetica', 'normal');
         doc.setFontSize(12);
@@ -127,14 +216,14 @@ function CashPaymentPage() {
         doc.setFont('Helvetica', 'normal');
         doc.setFontSize(12);
         doc.setTextColor('#2c3e50');
-        doc.text(`ID de Pedido: ${order.id}`, margin, yStart + 100);
-        doc.text(`Nombre: ${order.customerName}`, margin, yStart + 110);
-        doc.text(`Teléfono: ${order.customerPhone}`, margin, yStart + 120);
+        doc.text(`ID de Pedido: ${orderId}`, margin, yStart + 100);
+        doc.text(`Nombre: ${customerName}`, margin, yStart + 110);
+        doc.text(`Teléfono: ${customerPhone}`, margin, yStart + 120);
 
         // Agregar línea divisoria
         doc.setDrawColor(0, 0, 0);
         doc.setLineWidth(0.5);
-        doc.line(margin, yStart + 130, 190 - margin, yStart + 130); // Línea horizontal
+        doc.line(margin, yStart + 130, 190 - margin, yStart + 130);
 
         // Agregar lista de artículos
         doc.setFont('Helvetica', 'bold');
@@ -143,7 +232,7 @@ function CashPaymentPage() {
         doc.setFont('Helvetica', 'normal');
         doc.setTextColor('#2c3e50');
 
-        order.items.forEach((item, index) => {
+        items.forEach((item, index) => {
             const itemPosition = yStart + 150 + index * 10; // Ajustar posición
             doc.text(
                 `${item.name} x${item.quantity} - ${(item.price * item.quantity).toFixed(2)}€`,
@@ -152,15 +241,15 @@ function CashPaymentPage() {
             );
         });
 
-        const finalYPosition = yStart + 150 + order.items.length * 10 + 10;
+        const finalYPosition = yStart + 150 + items.length * 10 + 10;
         doc.setFont('Helvetica', 'bold');
         doc.setTextColor('#933e36');
-        doc.text(`Total: ${order.total}€`, margin, finalYPosition);
+        doc.text(`Total: ${total}€`, margin, finalYPosition);
 
-        if (order.notation) {
+        if (notation) {
             doc.setFont('Helvetica', 'normal');
             doc.setTextColor('#555');
-            doc.text(`Notas: ${order.notation}`, margin, finalYPosition + 10);
+            doc.text(`Notas: ${notation}`, margin, finalYPosition + 10);
         }
 
         doc.setFontSize(10);
@@ -168,7 +257,7 @@ function CashPaymentPage() {
         doc.text('Gracias por su compra. ¡Esperamos verle de nuevo!', margin, finalYPosition + 30);
 
         // Descargar el PDF
-        doc.save(`recibo_${order.id}.pdf`);
+        doc.save(`recibo_${orderId}.pdf`);
     };
 
     const loadImage = (url: string): Promise<HTMLImageElement> => {
@@ -190,12 +279,13 @@ function CashPaymentPage() {
         );
     }
 
-    if (!order) {
+    if (!orderId) {
         return <Typography variant="h6" color="error">Error al cargar el pedido.</Typography>;
     }
 
     return (
         <ThemeProvider theme={theme}>
+            <CssBaseline />
             <Container maxWidth="md" sx={{ mt: 4, mb: 4 }}>
                 <Paper elevation={3} sx={{ p: 4, borderRadius: 2, backgroundColor: '#fafafa' }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
@@ -225,11 +315,12 @@ function CashPaymentPage() {
                             boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
                         }}
                     >
+
                         <Typography variant="h5" gutterBottom>
-                            ID de Pedido: {order.id}
+                            ID de Pedido: {orderId}
                         </Typography>
                         <Typography variant="body1" paragraph>
-                            Por favor, presente este ID en la caja para realizar el pago en efectivo.
+                            Por favor, presente este ID en la caja para recojer el pedido.
                         </Typography>
                     </Box>
                     <Divider sx={{ my: 2 }} />
@@ -237,7 +328,7 @@ function CashPaymentPage() {
                         Detalles del Pedido:
                     </Typography>
                     <List sx={{ borderRadius: 2 }}>
-                        {order.items.map((item) => (
+                        {items.map((item) => (
                             <ListItem key={item.id} disablePadding>
                                 <ListItemText
                                     primary={`${item.name} x${item.quantity}`}
@@ -248,11 +339,11 @@ function CashPaymentPage() {
                     </List>
                     <Divider sx={{ my: 2 }} />
                     <Typography variant="h6" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
-                        Total: {order.total}€
+                        Total: {total}€
                     </Typography>
-                    {order.notation && (
+                    {notation && (
                         <Typography variant="body2" sx={{ mt: 2 }}>
-                            Notas: {order.notation}
+                            Notas: {notation}
                         </Typography>
                     )}
                     <Button
@@ -268,13 +359,15 @@ function CashPaymentPage() {
             </Container>
         </ThemeProvider>
     );
-}
+};
 
-// Envuelve el componente en un Suspense
-export default function SuspenseWrapper() {
+// Componente principal que envuelve TicketPage
+const App: React.FC = () => {
     return (
-        <Suspense fallback={<CircularProgress color="primary" />}>
-            <CashPaymentPage />
+        <Suspense fallback={<CircularProgress />}>
+            <TicketPage />
         </Suspense>
     );
-}
+};
+
+export default App;

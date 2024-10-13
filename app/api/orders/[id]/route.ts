@@ -2,16 +2,6 @@ import connect from '@/lib/db'; // Conexión a la base de datos
 import PedidoModel from '@/lib/modals/pedido'; // Modelo de pedido
 import { NextResponse } from 'next/server';
 
-// Define la estructura de los datos de un pedido
-interface Pedido {
-    id?: string; // El ID puede no estar presente en la creación
-    items: Array<{ id: string; quantity: number; price: number }>;
-    total: string;
-    status: string;
-    timestamp: string;
-    notation?: string; // Campo de notación añadido
-}
-
 // GET request: Obtener un pedido por ID
 export const GET = async (
     request: Request,
@@ -34,17 +24,24 @@ export const GET = async (
         }
 
         // Devolver el pedido en formato JSON
-        return NextResponse.json({
-            message: 'Pedido recuperado con éxito',
-            data: pedido,
-        }, { status: 200 });
+        return NextResponse.json(
+            {
+                message: 'Pedido recuperado con éxito',
+                data: pedido,
+            },
+            { status: 200 }
+        );
     } catch (error: unknown) {
         if (error instanceof Error) {
             console.error('Error recuperando el pedido:', error.message);
             return NextResponse.json(
-                { error: 'Error recuperando el pedido: ' + error.message },
+                { error: `Error recuperando el pedido: ${error.message}` },
                 { status: 500 }
             );
         }
+        return NextResponse.json(
+            { error: 'Error desconocido' },
+            { status: 500 }
+        );
     }
 };

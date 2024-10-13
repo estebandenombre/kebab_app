@@ -9,9 +9,12 @@ interface Pedido {
     total: string;
     status: string;
     timestamp: string;
-    notation?: string;
+    notation?: string; // Campo de notación añadido
     customerName?: string; // Campo añadido
     customerPhone?: string; // Campo añadido
+    pickupDateTime?: string; // Nuevo campo para la fecha y hora de recogida
+    isDelivery?: boolean; // Nuevo campo para indicar si es entrega a domicilio
+    paid?: boolean; // Nuevo campo para indicar si el pedido ha sido pagado
 }
 
 // GET request: Obtener todos los pedidos o filtrados por algún criterio
@@ -46,7 +49,7 @@ export const POST = async (request: Request) => {
         const data: Pedido = await request.json();
 
         // Validar los campos requeridos
-        const { items, total, status, timestamp, notation, customerName, customerPhone } = data;
+        const { items, total, status, timestamp } = data;
 
         // Validación de campos obligatorios
         if (!items || !Array.isArray(items) || items.length === 0 || !total || !status || !timestamp) {
@@ -55,14 +58,17 @@ export const POST = async (request: Request) => {
 
         // Crear un nuevo pedido con los datos recibidos
         const newPedido = new PedidoModel({
-            id: data.id,  // Asegúrate de proporcionar un ID o generarlo automáticamente
+            id: data.id, // Asegúrate de proporcionar un ID o generarlo automáticamente
             items,
             total,
             status,
             timestamp,
-            notation,
-            customerName,   // Este campo ahora no es obligatorio
-            customerPhone,   // Este campo ahora no es obligatorio
+            notation: data.notation,
+            customerName: data.customerName, // Este campo ahora no es obligatorio
+            customerPhone: data.customerPhone, // Este campo ahora no es obligatorio
+            pickupDateTime: data.pickupDateTime, // Añadir campo pickupDateTime
+            isDelivery: data.isDelivery ?? false, // Añadir el campo isDelivery
+            paid: data.paid ?? false, // Añadir el campo paid, con valor por defecto en `false` si no se proporciona
         });
 
         // Guardar el nuevo pedido en la base de datos
@@ -89,23 +95,29 @@ export const PUT = async (request: Request) => {
 
         const updateData: Partial<Pedido> = await request.json(); // Obtener los datos del cuerpo de la solicitud
 
-        // Validar los campos requeridos
-        if (!updateData.id || (!updateData.status && !updateData.notation && !updateData.customerName && !updateData.customerPhone)) {
-            return NextResponse.json({ error: "Faltan campos requeridos" }, { status: 400 });
+        // Validar que al menos el ID esté presente
+        if (!updateData.id) {
+            return NextResponse.json({ error: "Se requiere un ID para actualizar el pedido" }, { status: 400 });
         }
 
         // Crear un objeto con los campos a actualizar
         const updateFields: Partial<Pedido> = {};
-        if (updateData.status) updateFields.status = updateData.status;
+        if (updateData.status) {
+            updateFields.status = updateData.status;
+            updateFields.timestamp = new Date().toISOString(); // Actualizar el timestamp al momento actual
+        }
         if (updateData.notation !== undefined) updateFields.notation = updateData.notation;
         if (updateData.customerName) updateFields.customerName = updateData.customerName;
         if (updateData.customerPhone) updateFields.customerPhone = updateData.customerPhone;
+        if (updateData.pickupDateTime) updateFields.pickupDateTime = updateData.pickupDateTime;
+        if (updateData.isDelivery !== undefined) updateFields.isDelivery = updateData.isDelivery;
+        if (updateData.paid !== undefined) updateFields.paid = updateData.paid; // Añadir campo paid
 
         // Actualizar el pedido utilizando el ID proporcionado
         const updatedPedido = await PedidoModel.findOneAndUpdate(
             { id: updateData.id }, // Buscar por ID
             updateFields, // Actualizar los campos proporcionados
-            { new: true }
+            { new: true } // Devolver el documento actualizado
         );
 
         if (!updatedPedido) {
@@ -122,6 +134,7 @@ export const PUT = async (request: Request) => {
         return NextResponse.json({ error: "Error desconocido" }, { status: 500 });
     }
 };
+
 
 // DELETE request: Eliminar un pedido existente
 export const DELETE = async (request: Request) => {

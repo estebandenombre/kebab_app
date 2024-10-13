@@ -1,4 +1,4 @@
-'use client'
+'use client';
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -18,15 +18,14 @@ import {
     Snackbar,
     Card,
     CardContent,
-    CardActions,
-    Avatar,
+    CircularProgress,
     RadioGroup,
     FormControlLabel,
     Radio,
-    CircularProgress,
+    Checkbox,
 } from '@mui/material';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { Add, Remove, Delete, ShoppingCart, LocalDining, CreditCard, Money } from '@mui/icons-material';
+import { Add, Remove, Delete } from '@mui/icons-material';
 
 const theme = createTheme({
     palette: {
@@ -36,34 +35,9 @@ const theme = createTheme({
         secondary: {
             main: '#e74c3c',
         },
-        background: {
-            default: '#f5f5f5',
-            paper: '#ffffff',
-        },
-        text: {
-            primary: '#2c3e50',
-            secondary: '#7f8c8d',
-        },
     },
     typography: {
         fontFamily: 'Roboto, Arial, sans-serif',
-    },
-    components: {
-        MuiButton: {
-            styleOverrides: {
-                root: {
-                    borderRadius: 8,
-                },
-            },
-        },
-        MuiCard: {
-            styleOverrides: {
-                root: {
-                    borderRadius: 16,
-                    boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-                },
-            },
-        },
     },
 });
 
@@ -97,7 +71,9 @@ export default function DeliveryOrderPage() {
     const [paymentMethod, setPaymentMethod] = useState('');
     const [snackbarOpen, setSnackbarOpen] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('');
-    const [loading, setLoading] = useState(false); // Estado de carga
+    const [loading, setLoading] = useState(false);
+    const [schedulePickup, setSchedulePickup] = useState(false);
+    const [pickupDateTime, setPickupDateTime] = useState('');
 
     const addItemToOrder = (item: MenuItem) => {
         const existingItem = currentOrder.find((orderItem) => orderItem.id === item.id);
@@ -146,6 +122,7 @@ export default function DeliveryOrderPage() {
             return;
         }
 
+        // Aquí generamos el nuevo pedido
         const newOrder = {
             id: `ORD-${Date.now()}`,
             items: currentOrder,
@@ -157,10 +134,25 @@ export default function DeliveryOrderPage() {
             customerPhone,
             paymentMethod,
             isDelivery: true,
+            pickupDateTime: schedulePickup ? pickupDateTime : undefined, // Cambiar a undefined en lugar de null
         };
 
+        // Si el método de pago es tarjeta, redirigimos incluyendo todos los parámetros necesarios en la URL
+        if (paymentMethod === 'tarjeta') {
+            // Modificamos itemsSummary para incluir id y precio
+            const itemsSummary = currentOrder.map(item =>
+                `${item.id} (${item.name}): ${item.quantity} x ${item.price.toFixed(2)} €`
+            ).join(', ');
+            const total = newOrder.total; // Asegúrate de que esto se obtenga correctamente
+
+            // Redirigir con todos los parámetros
+            router.push(`/tarjeta?orderId=${newOrder.id}&total=${total}&customerName=${encodeURIComponent(customerName)}&customerPhone=${encodeURIComponent(customerPhone)}&notation=${encodeURIComponent(orderNotation)}&isDelivery=${encodeURIComponent(String(newOrder.isDelivery))}&pickupDateTime=${encodeURIComponent(pickupDateTime || '')}&items=${encodeURIComponent(itemsSummary)}`);
+            return; // Evitamos continuar con la creación del pedido
+        }
+
+        // Si el método de pago no es tarjeta, procedemos a hacer el POST
         try {
-            setLoading(true); // Activar carga
+            setLoading(true);
             const response = await fetch('/api/orders', {
                 method: 'POST',
                 headers: {
@@ -170,24 +162,21 @@ export default function DeliveryOrderPage() {
             });
 
             if (!response.ok) {
-                throw new Error('Error creating order');
+                throw new Error('Error creando el pedido');
             }
 
             const createdOrder = await response.json();
-
-            if (paymentMethod === 'tarjeta') {
-                router.push('/tarjeta');
-            } else {
-                router.push(`/efectivo?orderId=${createdOrder.data.id}`);
-            }
+            router.push(`/efectivo?orderId=${createdOrder.data.id}`);
         } catch (error) {
-            console.error('Error creating order:', error);
+            console.error('Error creando el pedido:', error);
             setSnackbarMessage('Error al crear el pedido');
             setSnackbarOpen(true);
         } finally {
-            setLoading(false); // Desactivar carga
+            setLoading(false);
         }
     };
+
+
 
     return (
         <ThemeProvider theme={theme}>
@@ -195,16 +184,16 @@ export default function DeliveryOrderPage() {
                 <Box sx={{ textAlign: 'center', mb: 4 }}>
                     <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
                         <img
-                            src="/logo.png" // Ruta de la imagen
+                            src="/logo.png"
                             alt="Logo de El Kebab de Iñaki"
-                            style={{ width: '150px' }} // Ajusta el tamaño según sea necesario
+                            style={{ width: '150px' }}
                         />
                     </Box>
                     <Typography
                         variant="h4"
                         component="h1"
                         gutterBottom
-                        sx={{ color: 'primary.main' }} // Cambia el color a uno de la paleta o usa un valor hex
+                        sx={{ color: 'primary.main' }}
                     >
                         El Kebab de Iñaki
                     </Typography>
@@ -215,31 +204,32 @@ export default function DeliveryOrderPage() {
                             <Typography variant="h5" gutterBottom sx={{ mb: 3 }}>
                                 Menú
                             </Typography>
-                            <Grid container spacing={3}>
+                            <Grid container spacing={2}>
                                 {menuItems.map((item) => (
                                     <Grid item xs={12} sm={6} key={item.id}>
-                                        <Card>
-                                            <CardContent>
-                                                <Typography variant="h6" component="div">
+                                        <Card sx={{ p: 2, borderRadius: 2, boxShadow: 2 }}>
+                                            <CardContent sx={{ pb: 1 }}>
+                                                <Typography variant="h6" component="div" sx={{ mb: 1 }}>
                                                     {item.name}
                                                 </Typography>
-                                                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                                                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                                                     {item.description}
                                                 </Typography>
-                                                <Typography variant="h6" color="primary">
-                                                    {item.price.toFixed(2)} €
-                                                </Typography>
+                                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 2 }}>
+                                                    <Typography variant="h6" color="primary">
+                                                        {item.price.toFixed(2)} €
+                                                    </Typography>
+                                                    <Button
+                                                        size="medium"
+                                                        variant="contained"
+                                                        color="primary"
+                                                        onClick={() => addItemToOrder(item)}
+                                                        startIcon={<Add />}
+                                                    >
+                                                        Añadir
+                                                    </Button>
+                                                </Box>
                                             </CardContent>
-                                            <CardActions>
-                                                <Button
-                                                    size="small"
-                                                    variant="contained"
-                                                    onClick={() => addItemToOrder(item)}
-                                                    startIcon={<Add />}
-                                                >
-                                                    Añadir
-                                                </Button>
-                                            </CardActions>
                                         </Card>
                                     </Grid>
                                 ))}
@@ -249,129 +239,105 @@ export default function DeliveryOrderPage() {
                     <Grid item xs={12} md={5}>
                         <Paper elevation={0} sx={{ p: 3, borderRadius: 4 }}>
                             <Typography variant="h5" gutterBottom sx={{ mb: 3 }}>
-                                Tu Pedido
+                                Resumen de Pedido
                             </Typography>
-                            {currentOrder.length > 0 ? (
-                                <List>
-                                    {currentOrder.map((item) => (
-                                        <ListItem key={item.id} disablePadding sx={{ mb: 2 }}>
-                                            <ListItemText
-                                                primary={item.name}
-                                                secondary={`${item.price.toFixed(2)} € x ${item.quantity}`}
-                                            />
-                                            <Box>
-                                                <IconButton size="small" onClick={() => removeItemFromOrder(item.id)}>
-                                                    <Remove />
-                                                </IconButton>
-                                                <Typography component="span" sx={{ mx: 1 }}>
-                                                    {item.quantity}
-                                                </Typography>
-                                                <IconButton size="small" onClick={() => addItemToOrder(item)}>
-                                                    <Add />
-                                                </IconButton>
-                                                <IconButton size="small" onClick={() => deleteItemFromOrder(item.id)} sx={{ ml: 1 }}>
-                                                    <Delete />
-                                                </IconButton>
-                                            </Box>
-                                        </ListItem>
-                                    ))}
-                                </List>
-                            ) : (
-                                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', my: 4 }}>
-                                    <Avatar sx={{ width: 60, height: 60, bgcolor: 'primary.main', mb: 2 }}>
-                                        <ShoppingCart />
-                                    </Avatar>
-                                    <Typography variant="body1" color="text.secondary">
-                                        Tu carrito está vacío
-                                    </Typography>
+                            <List>
+                                {currentOrder.map((item) => (
+                                    <ListItem key={item.id}>
+                                        <ListItemText
+                                            primary={`${item.name} (${item.quantity})`}
+                                            secondary={`${(item.price * item.quantity).toFixed(2)} €`}
+                                        />
+                                        <IconButton edge="end" aria-label="add" onClick={() => addItemToOrder(item)}>
+                                            <Add />
+                                        </IconButton>
+                                        <IconButton onClick={() => removeItemFromOrder(item.id)}>
+                                            <Remove />
+                                        </IconButton>
+                                        <IconButton onClick={() => deleteItemFromOrder(item.id)}>
+                                            <Delete />
+                                        </IconButton>
+                                    </ListItem>
+                                ))}
+                            </List>
+                            <Divider sx={{ my: 2 }} />
+                            <Typography variant="h6" align="right">
+                                Total: {calculateTotal(currentOrder)} €
+                            </Typography>
+                            <Divider sx={{ my: 2 }} />
+                            <Box component="form" sx={{ mt: 3 }}>
+                                <TextField
+                                    label="Nombre del Cliente"
+                                    variant="outlined"
+                                    fullWidth
+                                    required
+                                    value={customerName}
+                                    onChange={(e) => setCustomerName(e.target.value)}
+                                    sx={{ mb: 2 }}
+                                />
+                                <TextField
+                                    label="Teléfono"
+                                    variant="outlined"
+                                    fullWidth
+                                    required
+                                    value={customerPhone}
+                                    onChange={(e) => setCustomerPhone(e.target.value)}
+                                    sx={{ mb: 2 }}
+                                />
+                                <TextField
+                                    label="Observaciones"
+                                    variant="outlined"
+                                    fullWidth
+                                    value={orderNotation}
+                                    onChange={(e) => setOrderNotation(e.target.value)}
+                                    sx={{ mb: 2 }}
+                                />
+                                <RadioGroup
+                                    value={paymentMethod}
+                                    onChange={(e) => setPaymentMethod(e.target.value)}
+                                    row
+                                    sx={{ mb: 2 }}
+                                >
+                                    <FormControlLabel value="efectivo" control={<Radio />} label="Pago en efectivo" />
+                                    <FormControlLabel value="tarjeta" control={<Radio />} label="Pago con tarjeta" />
+                                </RadioGroup>
+                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                                    <FormControlLabel
+                                        control={<Checkbox checked={schedulePickup} onChange={(e) => setSchedulePickup(e.target.checked)} />}
+                                        label="Programar recogida"
+                                    />
+                                    {schedulePickup && (
+                                        <TextField
+                                            label="Fecha y hora"
+                                            variant="outlined"
+                                            type="datetime-local"
+                                            fullWidth
+                                            value={pickupDateTime}
+                                            onChange={(e) => setPickupDateTime(e.target.value)}
+                                            sx={{ ml: 2 }}
+                                        />
+                                    )}
                                 </Box>
-                            )}
-                            {currentOrder.length > 0 && (
-                                <>
-                                    <Divider sx={{ my: 2 }} />
-                                    <Typography variant="h6" sx={{ mb: 2 }}>
-                                        Total: {calculateTotal(currentOrder)} €
-                                    </Typography>
-                                </>
-                            )}
-                            <TextField
-                                fullWidth
-                                label="Tu Nombre"
-                                variant="outlined"
-                                value={customerName}
-                                onChange={(e) => setCustomerName(e.target.value)}
-                                margin="normal"
-                                required
-                            />
-                            <TextField
-                                fullWidth
-                                label="Tu Teléfono"
-                                variant="outlined"
-                                value={customerPhone}
-                                onChange={(e) => setCustomerPhone(e.target.value)}
-                                margin="normal"
-                                required
-                            />
-                            <TextField
-                                fullWidth
-                                label="Notas adicionales"
-                                variant="outlined"
-                                value={orderNotation}
-                                onChange={(e) => setOrderNotation(e.target.value)}
-                                margin="normal"
-                                multiline
-                                rows={3}
-                            />
-                            <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>
-                                Método de Pago
-                            </Typography>
-                            <RadioGroup
-                                value={paymentMethod}
-                                onChange={(e) => setPaymentMethod(e.target.value)}
-                            >
-                                <FormControlLabel
-                                    value="tarjeta"
-                                    control={<Radio />}
-                                    label={
-                                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                            <CreditCard sx={{ mr: 1 }} />
-                                            Tarjeta
-                                        </Box>
-                                    }
-                                />
-                                <FormControlLabel
-                                    value="efectivo"
-                                    control={<Radio />}
-                                    label={
-                                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                            <Money sx={{ mr: 1 }} />
-                                            Efectivo
-                                        </Box>
-                                    }
-                                />
-                            </RadioGroup>
-                            <Button
-                                variant="contained"
-                                color="primary"
-                                fullWidth
-                                size="large"
-                                onClick={handleSubmitOrder}
-                                disabled={currentOrder.length === 0 || !paymentMethod || loading} // Desactivar botón mientras se carga
-                                sx={{ mt: 2 }}
-                                startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <LocalDining />}
-                            >
-                                {loading ? 'Procesando...' : 'Realizar Pedido'}
-                            </Button>
+                                <Button
+                                    variant="contained"
+                                    color="primary"
+                                    onClick={handleSubmitOrder}
+                                    fullWidth
+                                    disabled={loading}
+                                >
+                                    {loading ? <CircularProgress size={24} /> : 'Realizar Pedido'}
+                                </Button>
+                            </Box>
                         </Paper>
                     </Grid>
                 </Grid>
+                <Snackbar
+                    open={snackbarOpen}
+                    autoHideDuration={6000}
+                    onClose={() => setSnackbarOpen(false)}
+                    message={snackbarMessage}
+                />
             </Container>
-            <Snackbar
-                open={snackbarOpen}
-                autoHideDuration={6000}
-                onClose={() => setSnackbarOpen(false)}
-                message={snackbarMessage}
-            />
         </ThemeProvider>
     );
 }
